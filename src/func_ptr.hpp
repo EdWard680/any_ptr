@@ -37,10 +37,13 @@ public:
 template<typename T>
 class func_ptr
 {
+private:
+	enum command_t {GET, COPY, DELETE};
+	
 public:
 	using ptr_t = T*;
 	//TODO: Make this accept a boolena arg which tells the object to release
-	using func_t = std::function<ptr_t(bool)>;
+	using func_t = std::function<ptr_t(command_t)>;
 
 private:
 	func_t fn_;
@@ -48,20 +51,33 @@ private:
 private:
 	class unique_ptr_wrap: public std::unique_ptr<T>
 	{
+	
 	public:
 		using std::unique_ptr<T>::unique_ptr;
 		unique_ptr_wrap(std::unique_ptr<T>&& other): std::unique_ptr<T>(std::move(other)) {}
-		unique_ptr_wrap(const unique_ptr_wrap&)
+		unique_ptr_wrap(const unique_ptr_wrap& other): std::unique_ptr<T>(other.get())
 		{
-			throw copied_unique_ptr_error();
+		}
+		
+		virtual ~unique_ptr_wrap()
+		{
+			std::unique_ptr<T>::release();
 		}
 		
 	public:
-		ptr_t operator()(bool b) const
+		ptr_t operator()(command_t command)
 		{
-			if(b)
-				return release();
-			return get();
+			switch(command)
+			{
+			case COPY:
+				throw copied_unique_ptr_error();
+				return nullptr;
+			case DELETE:
+				std::unique_ptr<T>::reset(nullptr);
+				return nullptr;
+			case GET:
+				return std::unique_ptr<T>::get();
+			}
 		}
 	};
 	
@@ -71,7 +87,7 @@ private:
 		internal_object_wrap(T init): obj_(std::move(init)) {}
 		
 	public:
-		ptr_t operator()(bool b) const {return &obj_;}
+		ptr_t operator()(command_t command) const {return &obj_;}
 		
 	private:
 		mutable T obj_;
@@ -82,7 +98,10 @@ public:
 	func_ptr() = default;
 	
 	/// copy constructor
-	func_ptr(const func_ptr<T>&) = default;
+	func_ptr(const func_ptr<T>& other): fn_(other.fn_)
+	{
+		fn_(COPY);
+	}
 	
 	/// copy assign
 	func_ptr<T>& operator= (const func_ptr<T>&) = default;
@@ -94,16 +113,19 @@ public:
 	func_ptr<T>& operator= (func_ptr<T>&&) = default;
 	
 	/// destructor
-	~func_ptr() = default;
+	~func_ptr()
+	{
+		fn_(DELETE);
+	}
 	
 	/// Generic pointer returning function
 	func_ptr(func_t fn): fn_(fn) {}
 	
 	/// Wraps raw pointer which it won't destroy
-	func_ptr(ptr_t ptr): fn_([ptr](bool b) {return ptr;}) {}
+	func_ptr(ptr_t ptr): fn_([ptr](command_t command) {return ptr;}) {}
 	
 	/// Wraps a shared_ptr which will destroy when the last reference to it does
-	func_ptr(std::shared_ptr<T> ptr): fn_([ptr](bool b) {return ptr.get();}) {}
+	func_ptr(std::shared_ptr<T> ptr): fn_([ptr](command_t command) {return ptr.get();}) {}
 	
 	/// Wraps a unique_ptr by putting it in a specially defined callable object which throws when its copied
 	func_ptr(std::unique_ptr<T> ptr): fn_(unique_ptr_wrap(std::move(ptr))) {}
@@ -113,7 +135,7 @@ public:
 	
 public:
 	/// Getter
-	ptr_t get() const {return fn_(false);}
+	ptr_t get() const {return fn_(GET);}
 	
 	/// Implicit conversion
 	operator ptr_t() const {return get();}
