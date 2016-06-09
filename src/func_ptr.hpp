@@ -100,7 +100,8 @@ public:
 	/// copy constructor
 	func_ptr(const func_ptr<T>& other): fn_(other.fn_)
 	{
-		fn_(COPY);
+		if(fn_)
+			fn_(COPY);
 	}
 	
 	/// copy assign
@@ -115,7 +116,8 @@ public:
 	/// destructor
 	~func_ptr()
 	{
-		fn_(DELETE);
+		if(fn_)
+			fn_(DELETE);
 	}
 	
 	/// Generic pointer returning function
@@ -135,13 +137,13 @@ public:
 	
 public:
 	/// Getter
-	ptr_t get() const {return fn_(GET);}
+	ptr_t get() const {if(fn_) return fn_(GET); else return nullptr;}
 	
 	/// Implicit conversion
-	operator ptr_t() const {return get();}
+	operator ptr_t() const {if(fn_) return get(); else return nullptr;}
 	
 	/// Dereference member access
-	ptr_t operator-> () const {return get();}
+	ptr_t operator-> () const {if(fn_) return get(); else return nullptr;}
 	
 	/// Dereference
 	T& operator* () const {return *get();}

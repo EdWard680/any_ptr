@@ -3,6 +3,8 @@
 #include <iostream>
 #include <string>
 
+#if __cplusplus <= 201103L
+
 namespace std
 {
 	template<class T, class... Args>
@@ -12,6 +14,8 @@ namespace std
 	}
 }
 
+#endif
+
 class Test
 {
 public:
@@ -20,7 +24,7 @@ public:
 public:
 	Test(std::string init): data_(std::move(init)) {std::cout << "Constructing " << data_ << std::endl;}
 	Test(const Test& other): data_(other.data_) {std::cout << "Copy Constructing " << data_ << std::endl;}
-	Test(Test&& other): data_(std::move(other.data_)) {std::cout << "Move Constructing" << data_ << std::endl;}
+	Test(Test&& other): data_(std::move(other.data_)) {std::cout << "Move Constructing " << data_ << std::endl;}
 	~Test() {std::cout << "Destructing " << data_ << std::endl;}
 };
 
@@ -30,21 +34,32 @@ int main(void)
 	using std::cout;
 	using std::endl;
 	
-	auto test_func = [](auto&& ptr_obj)
+	auto test_func = [](auto ptr_obj)
 	{
 		func_ptr<Test> init(std::move(ptr_obj));
+		cout << "init: " << init->data_ << endl;
 		func_ptr<Test> move(std::move(init));
 		init = std::move(move);
 		func_ptr<Test> copy(init);
 		init = copy;
-		std::cout << "init: " << init << std::endl;
-		std::cout << "copy: " << copy << std::endl;
-	}	
+		cout << "copy: " << copy->data_ << endl;
+	};
 	
-	test_func(new Test("raw_heap_mem"));
+	Test *to_delete;
+	test_func(to_delete = new Test("raw_heap_mem"));
+	delete to_delete;
 	test_func(std::make_shared<Test>("shared_ptr"));
-	test_func(std::make_unique<Test>("unique_ptr"));
-	test_func("stack_mem");
+	
+	try
+	{
+		test_func(std::make_unique<Test>("unique_ptr"));
+	}
+	catch(const copied_unique_ptr_error& e)
+	{
+		cout << "Unique Pointer Copying Detected" << endl;
+	}
+	
+	test_func(Test("stack_mem"));
 	
 	/*
 	func_ptr<int> shared(std::make_shared<int>(10));
